@@ -31,7 +31,7 @@ from tools.combination_index import combination_index
 
 # --------------------------------------------------------------------------- #
 # Class definition
-class mesh:
+class cartesian_mesh_t:
     """A class containing details of a Cartesian mesh and indexing functions."""
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
@@ -78,12 +78,16 @@ class mesh:
         # Cells
         self.tot_cells = math.prod(self.num_cells)
         # Faces
-        (self.num_faces,   self.num_face_orientations)   = self.num_points(1)
+        (self.num_faces,   self.tot_faces,   self.num_face_orientations)   = self.num_points(1)
         # Edges
-        (self.num_edges,   self.num_edge_orientations)   = self.num_points(2)
+        (self.num_edges,   self.tot_edges,   self.num_edge_orientations)   = self.num_points(2)
         # Corners
-        (self.num_corners, self.num_corner_orientations) = self.num_points(3)
-
+        (self.num_corners, self.tot_corners, self.num_corner_orientations) = self.num_points(3)
+        
+        # Lists of lists (of lists)
+        self.num_points = [[self.num_cells], self.num_faces, self.num_edges, self.num_corners]
+        self.tot_points = [[self.tot_cells], self.tot_faces, self.tot_edges, self.tot_corners]
+        self.tot_point_orientations = [1, self.num_face_orientations, self.num_edge_orientations, self.num_corner_orientations]
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
     # Spans dimensions in a circular way          
@@ -95,38 +99,51 @@ class mesh:
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
     # Computes a total number of points (cells, faces, edges or corners)
-    #                                   (n = 0, n = 1, n = 2 or n = 3  )
-    def num_points(self, n):
-        if (self.num_dims > (n - 1)):
-            num_orientations = math.comb(self.num_dims, n)
-            num_points       = [1] * num_orientations
+    #                n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
+    def num_points(self, num_directions):
+        if (self.num_dims > (num_directions - 1)):
+            num_orientations = math.comb(self.num_dims, num_directions)
+            num_points       = [None] * num_orientations
+            tot_points       = [1] * num_orientations
             for i in range(0, num_orientations):
-                rotations = [None] * n
-                for j in range(0, n):
-                    rotations[j] = self.rotate_dim(i, j)
+                num_points[i] = [None] * self.num_dims
+                comb_idx = combination_index(self.num_dims, num_directions, i)
                 for j in range(0, self.num_dims):
                     plus_one = 0
-                    if j in rotations:
+                    if j in comb_idx:
                         plus_one = 1
-                    num_points[i] *= (self.num_cells[j] + plus_one)
+                    num_points[i][j] = (self.num_cells[j] + plus_one)
+                    tot_points[i] *= num_points[i][j]
         else:
-            num_orientations = None
+            num_orientations = 0
             num_points       = None
-        return (num_points, num_orientations)
+            tot_points       = None
+        return (num_points, tot_points, num_orientations)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
     # Computes a global index for (cells, faces, edges or corners)
-    #                             (n = 0, n = 1, n = 2 or n = 3  )
-    def global_index(self, indices, n = 0, orientation = 0):
-        index  = 0
+    #          n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
+    def global_index(self, indices, num_directions = 0, orientation = 0):
         stride = 1
-        rotations = [None] * n
-        for j in range(0, n):
-            rotations[j] = self.rotate_dim(orientation, j)
+        if type(indices[0]) == int:
+            index = 0
+        elif type(indices[0]) == np.ndarray:
+            index = np.zeros(np.size(indices[0]), dtype=int)
         for i in range(0, self.num_dims):
-            index += indices[i] * stride
-            plus_one = 0
-            if i in rotations:
-                plus_one = 1
-            stride *= (self.num_cells[i] + plus_one)
+            index = index + indices[i] * stride
+            stride *= self.num_points[num_directions][orientation][i]
+        return index
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # Computes local index tuple for (cells, faces, edges or corners)
+    #             n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
+    def local_index(self, index, num_directions = 0, orientation = 0):
+        stride = self.tot_points[num_directions]
+        if type(stride)==list: stride = stride[orientation]
+        indices = [0] * self.num_dims
+        for i in range(self.num_dims-1,-1,-1):
+            stride = stride // self.num_points[num_directions][orientation][i]
+            indices[i] = index // stride
+            index = index % stride
+        return tuple(indices)
 
