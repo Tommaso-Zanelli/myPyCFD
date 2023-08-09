@@ -89,7 +89,29 @@ class cartesian_mesh_t:
         self.tot_points = [[self.tot_cells], self.tot_faces, self.tot_edges, self.tot_corners]
         self.tot_point_orientations = [1, self.num_face_orientations, self.num_edge_orientations, self.num_corner_orientations]
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+        # Initializes coordinate fields
+        # Cells
+        self.cell_centre_array = self.cmp_coords()
+        # Faces
+        self.cell_face_arrays = [None] * self.num_face_orientations
+        for i in range(self.num_face_orientations):
+            self.cell_face_arrays[i] = self.cmp_coords(1, i)
+        # Edges
+        self.cell_edge_arrays = [None] * self.num_edge_orientations
+        if self.num_dims > 1:
+            for i in range(self.num_edge_orientations):
+                self.cell_edge_arrays[i] = self.cmp_coords(2, i)
+        # Corners
+        self.cell_corner_arrays = [None] * self.num_corner_orientations
+        if self.num_dims > 2:
+            for i in range(self.num_corner_orientations):
+                self.cell_corner_arrays[i] = self.cmp_coords(3, i)
+
+        # List of lists (of lists)
+        self.cell_coord_arrays = [[self.cell_centre_array], self.cell_face_arrays, \
+                                   self.cell_edge_arrays, self.cell_corner_arrays]
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Spans dimensions in a circular way          
     def rotate_dim(self, i, j = 1):
         k = i + j
@@ -97,7 +119,7 @@ class cartesian_mesh_t:
             k %= self.num_dims
         return k
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Computes a total number of points (cells, faces, edges or corners)
     #                n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
     def num_points(self, num_directions):
@@ -146,4 +168,23 @@ class cartesian_mesh_t:
             indices[i] = index // stride
             index = index % stride
         return tuple(indices)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # Computes coordinates for (cells, faces, edges or corners)
+    #       n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
+    def cmp_coords(self, num_directions = 0, orientation = 0):
+        indexes  =  self.local_index(np.linspace(0, \
+                    self.tot_points[num_directions][orientation]-1, \
+                    self.tot_points[num_directions][orientation], dtype=int), \
+                    num_directions, orientation)
+        comb_idx = combination_index(self.num_dims, num_directions, orientation)
+        if comb_idx==None: comb_idx=()
+        coords = [0] * self.num_dims
+        for i in range(self.num_dims):
+            if i in comb_idx: 
+                x0 = self.domain[i][0]
+            else:
+                x0 = self.domain[i][0] + 0.5 * self.cell_size[i]
+            coords[i] = x0 + self.cell_size[i] * indexes[i]
+        return coords
 
