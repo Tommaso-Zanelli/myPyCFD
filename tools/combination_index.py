@@ -37,7 +37,7 @@ def combination_index(num_dimensions, num_directions, combination = None):
         If None, returns all combinations in order.
         The default is None.
     """
-    if num_directions > num_dimensions: 
+    if num_directions > num_dimensions:
             print("ERROR: number of directions cannot be greater than the number of dimensions!")
             return None
     if type(combination) is tuple:

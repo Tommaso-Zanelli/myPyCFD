@@ -34,7 +34,7 @@ from tools.combination_index import combination_index
 class cartesian_mesh_t:
     """A class containing details of a Cartesian mesh and indexing functions."""
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Constructor
     def __init__(self, domain, num_cells, is_periodic = None):
 
@@ -45,7 +45,7 @@ class cartesian_mesh_t:
         # Domain limits along each dimension (list of lists)
         self.domain    = [[None] * 2] * self.num_dims
 
-        # Assigns number of cells and domain limits 
+        # Assigns number of cells and domain limits
         for i in range(0, self.num_dims):
             self.num_cells[i] = num_cells[i]
             self.domain[i][0] = domain[2*i]
@@ -83,7 +83,7 @@ class cartesian_mesh_t:
         (self.num_edges,   self.tot_edges,   self.num_edge_orientations)   = self.num_points(2)
         # Corners
         (self.num_corners, self.tot_corners, self.num_corner_orientations) = self.num_points(3)
-        
+
         # Lists of lists (of lists)
         self.num_points = [[self.num_cells], self.num_faces, self.num_edges, self.num_corners]
         self.tot_points = [[self.tot_cells], self.tot_faces, self.tot_edges, self.tot_corners]
@@ -112,7 +112,7 @@ class cartesian_mesh_t:
                                    self.cell_edge_arrays, self.cell_corner_arrays]
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-    # Spans dimensions in a circular way          
+    # Spans dimensions in a circular way
     def rotate_dim(self, i, j = 1):
         k = i + j
         if (k >= self.num_dims):
@@ -142,7 +142,7 @@ class cartesian_mesh_t:
             tot_points       = None
         return (num_points, tot_points, num_orientations)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Computes a global index for (cells, faces, edges or corners)
     #          n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
     def global_index(self, indices, num_directions = 0, orientation = 0):
@@ -156,7 +156,7 @@ class cartesian_mesh_t:
             stride *= self.num_points[num_directions][orientation][i]
         return index
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Computes local index tuple for (cells, faces, edges or corners)
     #             n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
     def local_index(self, index, num_directions = 0, orientation = 0):
@@ -169,7 +169,7 @@ class cartesian_mesh_t:
             index = index % stride
         return tuple(indices)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Computes coordinates for (cells, faces, edges or corners)
     #       n = num_directions (n = 0, n = 1, n = 2 or n = 3  )
     def cmp_coords(self, num_directions = 0, orientation = 0):
@@ -181,7 +181,7 @@ class cartesian_mesh_t:
         if comb_idx==None: comb_idx=()
         coords = [0] * self.num_dims
         for i in range(self.num_dims):
-            if i in comb_idx: 
+            if i in comb_idx:
                 x0 = self.domain[i][0]
             else:
                 x0 = self.domain[i][0] + 0.5 * self.cell_size[i]
