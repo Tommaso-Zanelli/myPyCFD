@@ -46,6 +46,8 @@ class cartesian_mesh_t:
         self.num_cells = [None] * self.num_dims
         # Domain limits along each dimension (list of lists)
         self.domain    = [[None] * 2] * self.num_dims
+        # Domain sizes
+        self.domain_size = [None] * self.num_dims
         # Dimension orderings
         self.dimension_orderings = [range(0, self.num_dims), \
                                     range(self.num_dims - 1, -1, -1)]
@@ -55,6 +57,7 @@ class cartesian_mesh_t:
             self.num_cells[i] = num_cells[i]
             self.domain[i][0] = domain[2*i]
             self.domain[i][1] = domain[2*i+1]
+            self.domain_size[i] = self.domain[i][1] - self.domain[i][0]
 
         # Cell centre coordinates (list of numpy arrays)
         self.cell_centres = [None] * self.num_dims
@@ -71,6 +74,11 @@ class cartesian_mesh_t:
                                                self.num_cells[i])
             self.cell_faces[i]   = np.linspace(self.domain[i][0], self.domain[i][1], \
                                                (self.num_cells[i] + 1))
+
+        # Domain volume
+        self.domain_volume = np.prod(self.domain_size)
+        # Cell volume
+        self.cell_volume   = np.prod(self.cell_size)
 
         # Assigns the periodicity of the domain boundaries
         self.is_periodic = [[False] * 2] * self.num_dims
@@ -94,6 +102,23 @@ class cartesian_mesh_t:
         self.tot_points = [[self.tot_cells], self.tot_faces, self.tot_edges, self.tot_corners]
         self.tot_point_orientations = [1, self.num_face_orientations, self.num_edge_orientations, self.num_corner_orientations]
 
+        # Computes cell face areas and edge lengths
+        # Faces
+        self.cell_faces_area = [1] * self.num_face_orientations
+        for i in range(self.num_face_orientations):
+            comb_idx = combination_index(self.num_dims, 1, i)
+            for j in range(self.num_dims):
+                if not j in comb_idx:
+                    self.cell_faces_area[i] *= self.cell_size[j]
+        # Edges
+        self.cell_edges_length = [1] * self.num_edge_orientations
+        for i in range(self.num_edge_orientations):
+            comb_idx = combination_index(self.num_dims, 2, i)
+            for j in range(self.num_dims):
+                if not j in comb_idx:
+                    self.cell_edges_length[i] *= self.cell_size[j]
+        del(comb_idx)
+
         # Initializes coordinate fields
         # Cells
         self.cell_centre_array = self.cmp_coords()
@@ -112,9 +137,10 @@ class cartesian_mesh_t:
             for i in range(self.num_corner_orientations):
                 self.cell_corner_arrays[i] = self.cmp_coords(3, i)
 
-        # List of lists (of lists)
+        # Lists of lists (of lists)
         self.cell_coord_arrays = [[self.cell_centre_array], self.cell_face_arrays, \
                                    self.cell_edge_arrays, self.cell_corner_arrays]
+        self.cell_dimensions   = [[self.cell_volume], self.cell_faces_area, self.cell_edges_length]
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Spans dimensions in a circular way
