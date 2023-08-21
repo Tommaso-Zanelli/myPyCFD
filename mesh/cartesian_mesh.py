@@ -29,6 +29,8 @@ import sys
 sys.path.append('../')
 from tools.combination_index import combination_index
 
+reverse_order = False
+
 # --------------------------------------------------------------------------- #
 # Class definition
 class cartesian_mesh_t:
@@ -44,6 +46,9 @@ class cartesian_mesh_t:
         self.num_cells = [None] * self.num_dims
         # Domain limits along each dimension (list of lists)
         self.domain    = [[None] * 2] * self.num_dims
+        # Dimension orderings
+        self.dimension_orderings = [range(0, self.num_dims), \
+                                    range(self.num_dims - 1, -1, -1)]
 
         # Assigns number of cells and domain limits
         for i in range(0, self.num_dims):
@@ -151,7 +156,7 @@ class cartesian_mesh_t:
             index = 0
         elif type(indices[0]) == np.ndarray:
             index = np.zeros(np.size(indices[0]), dtype=int)
-        for i in range(0, self.num_dims):
+        for i in self.dimension_orderings[not reverse_order]:
             index = index + indices[i] * stride
             stride *= self.num_points[num_directions][orientation][i]
         return index
@@ -163,7 +168,7 @@ class cartesian_mesh_t:
         stride = self.tot_points[num_directions]
         if type(stride)==list: stride = stride[orientation]
         indices = [0] * self.num_dims
-        for i in range(self.num_dims-1,-1,-1):
+        for i in self.dimension_orderings[reverse_order]:
             stride = stride // self.num_points[num_directions][orientation][i]
             indices[i] = index // stride
             index = index % stride
