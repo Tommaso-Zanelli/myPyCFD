@@ -25,6 +25,7 @@
 # Modules
 import numpy as np
 import sys
+import os
 sys.path.append('../')
 from mesh.cartesian_mesh import cartesian_mesh_t
 from tools.combination_index import combination_index # check if actually needed
@@ -34,7 +35,7 @@ from tools.combination_index import combination_index # check if actually needed
 class field_t:
     """A class containing a scalar field over a Cartesian mesh."""
 
-    # ----------------------------------------------------------------------- #
+    # ======================================================================= #
     # Constructor method
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
@@ -50,6 +51,7 @@ class field_t:
         self.orientation    = orientation
 
         # Assigns total number of values in the field
+        self.num_points = self.mesh.num_points[num_directions][orientation]
         self.tot_points = self.mesh.tot_points[num_directions][orientation]
 
         # Initializes the field
@@ -57,6 +59,7 @@ class field_t:
             # If the initial condition is a function or method, pass to it the mesh coordinates
             coords_temp = self.mesh.cell_coord_arrays[num_directions][orientation]
             self.values = init_values(tuple(coords_temp))
+            del(coords_temp)
 
         elif type(init_values) == int or type(init_values) == float:
             # If the initial condition is a constant value, assign it to the array
@@ -71,24 +74,71 @@ class field_t:
                 print("ERROR: inconsistent field shape (", np.shape(init_values), \
                       " vs. (", self.mesh.tot_points[num_directions][orientation], ",))")
 
+        elif type(init_values) == str:
+            # If the initial condition is a string, assume it is a file name
+            if os.path.isfile(init_values):
+                # Extract file extension
+                temp = init_values.split(".")
+                ext  = temp[-1]
+                # If the file is a numpy binary file
+                if ext == "npy":
+                    temp_values = np.load(init_values)
+                # Any other extension assumes ascii text format
+                else:
+                    temp_values = np.loadtxt(init_values, dtype=np.double)
+                if len(np.shape(temp_values)) == 1 and np.size(temp_values, 0) == self.tot_points:
+                    self.values = temp_values
+                else:
+                    self.values = None
+                    print("ERROR: inconsistent field shape (", np.shape(temp_values), \
+                          " vs. (", self.mesh.tot_points[num_directions][orientation], ",))")
+                del(temp, ext, temp_values)
+            else:
+                self.values = None
+                print("ERROR: file \"", str, "\" not found.") 
+            
         else:
             # Default is an error message
             self.values = None
             print("ERROR: invald initial condition: type = ", type(init_values))
 
-    # ----------------------------------------------------------------------- #
+
+    # ======================================================================= #
     # Overload indexing ("[]") operator
-    
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload get item operator
     def __getitem__(self, key):
+
+        # Get slice of the full values array
         if isinstance(key, slice):
-            print("Slicing not implemented yet")
-            return None
-        if type(key)==int:
             return self.values[key]
+
+        # Get single value
+        elif type(key)==int:
+            return self.values[key]
+
+        # Get subset from array of indices
+        elif type(key)==np.ndarray:
+            if key.drtpe==np.int32 or key.drtpe==np.int64:
+                return self.values[key]
+            else:
+                print("ERROR: indices are not integers!")
+                return None
+
+        # If indexing is done dimension-wise
         elif type(key) == tuple:
-            return self.values[self.mesh.global_index(key, self.num_directions, self.orientation)]
+
+            # Get slice of the full values array
+            if any(isinstance(key_i, slice) for key_i in key): 
+                print("Slicing not implemented yet for dimension-wise indexes")
+                return None
+
+            # Get single value
+            else:
+                return self.values[self.mesh.global_index(key, self.num_directions, self.orientation)]
+
+        # If the index is of unexpected type
         else:
             print("Unrecognised index type: ", type(key))
             return None
@@ -96,25 +146,58 @@ class field_t:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload set item operator
     def __setitem__(self, key, value):
+
+        # Assign slice of the full values array
         if isinstance(key, slice):
-            print("Slicing not implemented yet")
-            return None
-        if type(key)==int:
+            if type(value) == np.ndarray: 
+                slice_len = self.slice_size(key, self.tot_points)
+                if len(np.shape(value)) == 1 and np.size(value, 0) == slice_len:
+                    self.values[key] = value
+                else:
+                    print("ERROR: inconsistent dimensions: ", \
+                          np.shape(value), " vs. (", slice_len, ",))")
+            else:
+                print("ERROR: the value provided is not a numpy array!")
+                    
+
+        # Assign single value
+        elif type(key)==int:
             self.values[key] = value
+
+        # Set subset from array of indices
+        elif type(key)==np.ndarray:
+            if key.drtpe==np.int32 or key.drtpe==np.int64:
+                if len(np.shape(value)) == len(np.shape(key)):
+                    if all(np.size(value, i) == np.size(key, i) for i in range(len(np.shape(value)))):
+                        self.values[key] = value
+                    else:
+                        print("ERROR: inconsistent dimensions: ", \
+                              np.shape(value), " vs. ", np.shape(key), ")")
+                else:
+                    print("ERROR: inconsistent dimensions: ", \
+                          np.shape(value), " vs. ", np.shape(key), ")")
+            else:
+                print("ERROR: indices are not integers!")
+
+        # If indexing is done dimension-wise
         elif type(key) == tuple:
-            self.values[self.mesh.global_index(key, self.num_directions, self.orientation)] = value
+
+            # Get slice of the full values array
+            if any(isinstance(key_i, slice) for key_i in key): 
+                print("Slicing not implemented yet for dimension-wise indexes")
+                return None
+
+            # Get single value
+            else:
+                self.values[self.mesh.global_index(key, self.num_directions, self.orientation)] = value
+
+        # If the index is of unexpected type
         else:
             print("Unrecognised index type: ", type(key))
 
 
-    # ----------------------------------------------------------------------- #
+    # ======================================================================= #
     # Overload binary operators
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-    # Create copy of the current object and return it
-    def create_copy(self):
-        copy_obj = field_t(self.mesh, self.values, self.num_directions, self.orientation)
-        return copy_obj
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload addition operator
@@ -130,7 +213,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values + other.values
@@ -156,7 +239,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values - other.values
@@ -182,7 +265,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values * other.values
@@ -204,7 +287,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                result = None                   
+                result = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 result = self.values @ other.values
@@ -230,7 +313,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values / other.values
@@ -256,7 +339,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values // other.values
@@ -282,7 +365,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values % other.values
@@ -308,7 +391,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = self.values ** other.values
@@ -320,7 +403,8 @@ class field_t:
             copy_obj = None
         return copy_obj
 
-    # ----------------------------------------------------------------------- #
+
+    # ======================================================================= #
     # Overload binary operators (inverted operand versions)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
@@ -342,7 +426,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = other.values - self.values
@@ -367,17 +451,80 @@ class field_t:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload truediv ("/") operator
     def __rtruediv__(self, other):
-        return None
+        copy_obj = self.create_copy()
+        if type(other) == int:
+            copy_obj.values = float(other) / self.values
+        elif type(other) == float:
+            copy_obj.values = other / self.values
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                copy_obj.values = other / self.values
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+                copy_obj = None
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                copy_obj.values = other.values / self.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+                copy_obj = None
+        else:
+            print("ERROR: unknown operand type: ", type(other))
+            copy_obj = None
+        return copy_obj
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload floordiv ("//") operator
     def __rfloordiv__(self, other):
-        return None
+        copy_obj = self.create_copy()
+        if type(other) == int:
+            copy_obj.values = float(other) // self.values
+        elif type(other) == float:
+            copy_obj.values = other // self.values
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                copy_obj.values = other // self.values
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+                copy_obj = None
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                copy_obj.values = other.values // self.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+                copy_obj = None
+        else:
+            print("ERROR: unknown operand type: ", type(other))
+            copy_obj = None
+        return copy_obj
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload mod ("%") operator
     def __rmod__(self, other):
-        return None
+        copy_obj = self.create_copy()
+        if type(other) == int:
+            copy_obj.values = float(other) % self.values
+        elif type(other) == float:
+            copy_obj.values = other % self.values
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                copy_obj.values = other % self.values
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+                copy_obj = None
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                copy_obj.values = other.values % self.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+                copy_obj = None
+        else:
+            print("ERROR: unknown operand type: ", type(other))
+            copy_obj = None
+        return copy_obj
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload pow ("**") operator
@@ -393,7 +540,7 @@ class field_t:
             else:
                 print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
                       self.mesh.tot_points[self.num_directions][self.orientation], ",))")
-                copy_obj = None                   
+                copy_obj = None
         elif type(other) == field_t:
             if other.tot_points == self.tot_points:
                 copy_obj.values = other.values ** self.values
@@ -405,40 +552,199 @@ class field_t:
             copy_obj = None
         return copy_obj
 
-    # ----------------------------------------------------------------------- #
+
+    # ======================================================================= #
     # Overload unary operators
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload addition operator
     def __iadd__(self, other):
-        pass
+        if type(other) == int:
+            self.values += float(other)
+        elif type(other) == float:
+            self.values += other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values += other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values += other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload subtraction operator
     def __isub__(self, other):
-        pass
+        if type(other) == int:
+            self.values -= float(other)
+        elif type(other) == float:
+            self.values -= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values  -= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values -= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload multiplication operator
     def __imul__(self, other):
-        pass
+        if type(other) == int:
+            self.values *= float(other)
+        elif type(other) == float:
+            self.values *= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values *= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values *= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload truediv ("/") operator
     def __itruediv__(self, other):
-        pass
+        if type(other) == int:
+            self.values /= float(other)
+        elif type(other) == float:
+            self.values /= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values /= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values /= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload floordiv ("//") operator
     def __ifloordiv__(self, other):
-        pass
+        if type(other) == int:
+            self.values //= float(other)
+        elif type(other) == float:
+            self.values //= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values //= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values //= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload mod ("%") operator
     def __imod__(self, other):
-        pass
+        if type(other) == int:
+            self.values %= float(other)
+        elif type(other) == float:
+            self.values %= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values %= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values %= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
     # Overload pow ("**") operator
     def __ipow__(self, other):
-        pass
+        if type(other) == int:
+            self.values **= other
+        elif type(other) == float:
+            self.values **= other
+        elif type(other) == np.ndarray:
+            if len(np.shape(other)) == 1 and np.size(other, 0) == self.tot_points:
+                self.values **= other
+            else:
+                print("ERROR: inconsistent field shape (", np.shape(other), " vs. (", \
+                      self.mesh.tot_points[self.num_directions][self.orientation], ",))")
+        elif type(other) == field_t:
+            if other.tot_points == self.tot_points:
+                self.values **= other.values
+            else:
+                print("ERROR: inconsistent field size (", other.tot_points," vs. ", self.tot_points, ")")
+        else:
+            print("ERROR: unknown operand type: ", type(other))
+
+
+    # ======================================================================= #
+    # Sum and norm operations
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # returns a sum of all elements
+    def sum(self):
+        return np.sum(self.values)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # returns L1 norm of all elements
+    def sum(self, integral=False, average=False):
+        return np.sum(np.abs(self.values))
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # returns L2 norm of all elements
+    def sum(self, integral=False, average=False):
+        return np.sum(self.values ** 2)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # returns Linf norm of all elements
+    def sum(self, integral=False, average=False):
+        return np.max(np.abs(self.values))
+
+
+    # ======================================================================= #
+    # Tools
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # Create copy of the current object and return it
+    def create_copy(self):
+        copy_obj = field_t(self.mesh, self.values, self.num_directions, self.orientation)
+        return copy_obj
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+    # Get total size of a slice
+    def slice_size(self, slice_key, tot_size):
+        start = slice_key.start
+        if start == None: start = 0
+        stop = slice_key.stop
+        if stop  == None: stop = tot_size
+        step = slice_key.step
+        if step  == None: step = 1
+        return (stop - start) // step
+    

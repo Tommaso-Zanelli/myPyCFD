@@ -37,13 +37,13 @@ from fields.field import field_t
 verbose = False
 
 # 2D mesh size
-Nx_2D = 4096
-Ny_2D = 4096
+Nx_2D = 8 #4096
+Ny_2D = 4 #4096
 
 #3D mesh size
-Nx_3D = 256
-Ny_3D = 256
-Nz_3D = 256
+Nx_3D = 4 #256
+Ny_3D = 4 #256
+Nz_3D = 4 #256
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
@@ -53,5 +53,6 @@ field2D_1 = field_t(test2Dmesh)
 field2D_2 = field_t(test2Dmesh, 9)
 def f0(xx):
     return xx[0] ** 2
-field2D_3 = field_t(test2Dmesh, f0, 1, 1)
+
+field2D_3 = field_t(test2Dmesh, f0)
 field2D_4 = field2D_1.create_copy()
